@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flaskapi
+  labels:
+    app: flaskapi
+spec:
+  selector:
+    matchLabels:
+      app: flaskapi
+  template:
+    metadata:
+      labels:
+        app: flaskapi
+    spec:
+      containers:
+        - name: flaskapi
+          image: k8s/flask-nginx
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flaskapi
+spec:
+  type: NodePort
+  selector:
+    app: flaskapi
+  ports:
+  - port: 80
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: flask-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        backend:
+          serviceName: flaskapi 
+          servicePort: 80
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: flask-hpa
+  annotations:
+    metric-config.pods.requests-per-second.json-path/json-key: "$.http_server.rps"
+    metric-config.pods.requests-per-second.json-path/path: /metrics
+    metric-config.pods.requests-per-second.json-path/port: "9090"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: flaskapi
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Pods
+    pods:
+      metric:
+        name: requests-per-second
+      target:
+        averageValue: 3
+        type: AverageValue
